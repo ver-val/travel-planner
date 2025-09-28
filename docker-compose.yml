@@ -1,0 +1,38 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: travel_planner
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASS: postgres
+      DB_NAME: travel_planner
+      PORT: 3000
+    ports:
+      - "3000:3000"
+    command: sh -c "npm run migration:run && npm run start:dev"
+    volumes:
+      - .:/app               # ✅ щоб live-reload працював
+      - /app/node_modules    # ✅ щоб не затирати node_modules
+      - ./.env:/app/.env:ro
+
+volumes:
+  pgdata:

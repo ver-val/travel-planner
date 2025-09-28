@@ -1,0 +1,102 @@
+# --------------------------------------------------
+# Node.js / TypeScript
+# --------------------------------------------------
+node_modules/
+dist/
+build/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# TypeScript
+*.tsbuildinfo
+
+# --------------------------------------------------
+# Environment & Config
+# --------------------------------------------------
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+.env.*.local
+
+# Orm / Database
+ormconfig.json
+ormconfig.js
+ormconfig.ts.local
+
+# --------------------------------------------------
+# Jest / Testing
+# --------------------------------------------------
+coverage/
+test-results/
+jest-*.json
+
+# Temporary files
+.tmp/
+.temp/
+*.tmp
+
+# --------------------------------------------------
+# Docker / Containers
+# --------------------------------------------------
+docker-compose.override.yml
+docker-compose.test.override.yml
+.DS_Store
+*.pid
+*.seed
+*.pid.lock
+
+# --------------------------------------------------
+# OS / Editor junk
+# --------------------------------------------------
+*.swp
+*.swo
+*.swn
+*.bak
+*.orig
+Thumbs.db
+.DS_Store
+.idea/
+.vscode/
+*.iml
+
+# --------------------------------------------------
+# Logs & PIDs
+# --------------------------------------------------
+logs/
+*.log
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# --------------------------------------------------
+# Compiled test artifacts
+# --------------------------------------------------
+test/**/*.js
+test/**/*.d.ts
+
+# --------------------------------------------------
+# Docker volumes / database dumps
+# --------------------------------------------------
+data/
+pgdata/
+dump.sql
+*.sql
+
+# --------------------------------------------------
+# Build outputs (for container builds)
+# --------------------------------------------------
+/coverage
+/migrations/*.js
+/scripts/*.js
+
+# --------------------------------------------------
+# CI / CD
+# --------------------------------------------------
+.nova/
+*.cache

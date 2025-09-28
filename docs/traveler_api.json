@@ -1,0 +1,13 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Travel Planner API",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/api/travel-plans": {},
+    "/api/travel-plans/{id}": {},
+    "/api/travel-plans/{id}/locations": {},
+    "/api/locations/{id}": {}
+  }
+}
