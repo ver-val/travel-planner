@@ -15,7 +15,6 @@ export class HealthController {
   @Get()
   @HealthCheck()
   async check() {
-    // if DB is down -> Terminus return 503
     return this.health.check([
       async () => this.db.pingCheck('database'),
     ]);
