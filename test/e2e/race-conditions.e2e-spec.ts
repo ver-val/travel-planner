@@ -1,8 +1,10 @@
 import { Test } from '@nestjs/testing';
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { INestApplication } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import * as request from 'supertest';
 import { AppModule } from '../../src/app.module';
+import { createAppValidationPipe } from '../../src/common/pipes/app-validation.pipe';
+import { AllExceptionsFilter } from '../../src/filters/all-exceptions.filter';
 import dataSource from '../../ormconfig';
 
 describe('Race Conditions (integration)', () => {
@@ -35,7 +37,8 @@ describe('Race Conditions (integration)', () => {
         const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
         app = moduleRef.createNestApplication();
         app.setGlobalPrefix('api');
-        app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
+        app.useGlobalPipes(createAppValidationPipe());
+        app.useGlobalFilters(new AllExceptionsFilter());
         await app.init();
     });
 
@@ -64,7 +67,6 @@ describe('Race Conditions (integration)', () => {
 
         const final = await request(app.getHttpServer()).get(`/api/travel-plans/${id}`).expect(200);
         expect(final.body.version).toBe(2);
-        // один з апдейтів пройшов, значення бюджету 1100 або 1200
         expect([1100, 1200]).toContain(Number(final.body.budget));
     });
 
@@ -76,7 +78,6 @@ describe('Race Conditions (integration)', () => {
             budget: 50 + i * 10,
         }));
 
-        // Викликаємо одночасно
         const results = await Promise.allSettled(
             payloads.map(p =>
                 request(app.getHttpServer())
@@ -85,22 +86,18 @@ describe('Race Conditions (integration)', () => {
             )
         );
 
-        // Перевіряємо статуси: мають бути лише 201 або 409
         const statuses = results.map(r =>
             r.status === 'fulfilled' ? r.value.status : r.reason?.status
         );
         expect(statuses.every(s => [201, 409].includes(s))).toBe(true);
 
-        // Забираємо фінальний стан плану
         const plan = await request(app.getHttpServer()).get(`/api/travel-plans/${id}`).expect(200);
 
         const orders = plan.body.locations.map((l: any) => l.visit_order);
         const unique = new Set(orders);
 
-        // ✅ Перевіряємо, що візит ордери унікальні
         expect(unique.size).toBe(orders.length);
 
-        // ✅ І що вони зростають
         const sorted = [...orders].sort((a, b) => a - b);
         expect(sorted).toEqual(sorted.map((v, i) => i + 1)); // тобто 1,2,...,n
     });
@@ -115,19 +112,31 @@ describe('Race Conditions (integration)', () => {
             .expect(201);
 
         const locId = created.body.id;
+        const baseVersion = created.body.version;
 
         const [u1, u2] = await Promise.all([
-            request(app.getHttpServer()).put(`/api/locations/${locId}`).send({ budget: 75.0 }),
-            request(app.getHttpServer()).put(`/api/locations/${locId}`).send({ notes: 'Tickets booked!' })
+            request(app.getHttpServer()).put(`/api/locations/${locId}`).send({ budget: 75.0, version: baseVersion }),
+            request(app.getHttpServer()).put(`/api/locations/${locId}`).send({ notes: 'Tickets booked!', version: baseVersion })
         ]);
 
-        expect(u1.status).toBe(200);
-        expect(u2.status).toBe(200);
+        const successResponse = u1.status === 200 ? u1 : u2;
+        const conflictResponse = u1.status === 409 ? u1 : u2;
+
+        expect(successResponse.status).toBe(200);
+        expect(conflictResponse.status).toBe(409);
+
+        const planAfterConflict = await request(app.getHttpServer()).get(`/api/travel-plans/${id}`).expect(200);
+        const currentLoc = planAfterConflict.body.locations.find((l: any) => l.id === locId);
+        const retry = await request(app.getHttpServer())
+            .put(`/api/locations/${locId}`)
+            .send({ notes: 'Tickets booked!', version: currentLoc.version })
+            .expect(200);
 
         const got = await request(app.getHttpServer()).get(`/api/travel-plans/${id}`).expect(200);
         const loc = got.body.locations.find((l: any) => l.id === locId);
         expect(Number(loc.budget)).toBeCloseTo(75.0, 2);
         expect(loc.notes).toBe('Tickets booked!');
+        expect(retry.body.version).toBeGreaterThan(currentLoc.version);
     });
 
     it('Cascade delete: delete plan -> locations gone', async () => {

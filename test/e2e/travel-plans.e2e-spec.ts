@@ -1,8 +1,10 @@
 import { Test } from '@nestjs/testing';
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { INestApplication } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import * as request from 'supertest';
 import { AppModule } from '../../src/app.module';
+import { createAppValidationPipe } from '../../src/common/pipes/app-validation.pipe';
+import { AllExceptionsFilter } from '../../src/filters/all-exceptions.filter';
 import dataSource from '../../ormconfig';
 
 describe('Travel Plans API (integration)', () => {
@@ -27,7 +29,8 @@ describe('Travel Plans API (integration)', () => {
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
     app.setGlobalPrefix('api');
-    app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
+    app.useGlobalPipes(createAppValidationPipe());
+    app.useGlobalFilters(new AllExceptionsFilter());
     await app.init();
   });
 
@@ -53,6 +56,7 @@ describe('Travel Plans API (integration)', () => {
     expect(res.body.title).toBe('Test European Journey');
     expect(res.body.version).toBe(1);
     expect(res.body.id).toMatch(/^[0-9a-f-]{36}$/);
+    expect(res.body.budget).toBeCloseTo(2500.0, 2);
   });
 
   it('GET /api/travel-plans/:id -> 200', async () => {
@@ -85,10 +89,28 @@ describe('Travel Plans API (integration)', () => {
 
     expect(ok.body.version).toBe(2);
 
-    await request(app.getHttpServer())
+    const conflictRes = await request(app.getHttpServer())
       .put(`/api/travel-plans/${id}`)
       .send({ title: 'Should Fail Update', version: v })
       .expect(409);
+
+    expect(conflictRes.body.error).toContain('Conflict');
+    expect(conflictRes.body.current_version).toBe(ok.body.version);
+  });
+
+  it('PUT /api/travel-plans/:id -> 400 when version missing', async () => {
+    const created = await request(app.getHttpServer())
+      .post('/api/travel-plans')
+      .send({ title: 'Versioned Plan' })
+      .expect(201);
+
+    const res = await request(app.getHttpServer())
+      .put(`/api/travel-plans/${created.body.id}`)
+      .send({ title: 'Missing version' })
+      .expect(400);
+
+    expect(res.body.error).toBe('Validation error');
+    expect(res.body.details).toContain('Version is required');
   });
 
   it('DELETE /api/travel-plans/:id -> 204, then GET -> 404', async () => {

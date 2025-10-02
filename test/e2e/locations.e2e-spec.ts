@@ -1,8 +1,10 @@
 import { Test } from '@nestjs/testing';
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { INestApplication } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import * as request from 'supertest';
 import { AppModule } from '../../src/app.module';
+import { createAppValidationPipe } from '../../src/common/pipes/app-validation.pipe';
+import { AllExceptionsFilter } from '../../src/filters/all-exceptions.filter';
 import dataSource from '../../ormconfig';
 
 describe('Locations API (integration)', () => {
@@ -35,7 +37,8 @@ describe('Locations API (integration)', () => {
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
     app.setGlobalPrefix('api');
-    app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
+    app.useGlobalPipes(createAppValidationPipe());
+    app.useGlobalFilters(new AllExceptionsFilter());
     await app.init();
   });
 
@@ -77,14 +80,16 @@ describe('Locations API (integration)', () => {
       .send({ name: 'Place' })
       .expect(201);
     const locId = created.body.id;
+    const version = created.body.version;
 
     const upd = await request(app.getHttpServer())
       .put(`/api/locations/${locId}`)
-      .send({ name: 'Place Updated', budget: 30.0, notes: 'Nice!' })
+      .send({ name: 'Place Updated', budget: 30.0, notes: 'Nice!', version })
       .expect(200);
 
     expect(upd.body.name).toBe('Place Updated');
     expect(Number(upd.body.budget)).toBeCloseTo(30.0, 2);
+    expect(upd.body.version).toBe(version + 1);
     expect(upd.body.notes).toBe('Nice!');
   });
 
@@ -108,28 +113,34 @@ describe('Locations API (integration)', () => {
 
   it('Validation & FK -> 400/404', async () => {
     // invalid UUID in path
-    await request(app.getHttpServer())
+    const invalidUuidRes = await request(app.getHttpServer())
       .post(`/api/travel-plans/invalid-uuid/locations`)
       .send({ name: 'X' })
       .expect(400);
+    expect(invalidUuidRes.body.error).toContain('Invalid UUID format');
 
     // non-existing plan
-    await request(app.getHttpServer())
+    const orphanRes = await request(app.getHttpServer())
       .post(`/api/travel-plans/8fe6038f-c978-4d7f-861e-58b50e879207/locations`)
       .send({ name: 'Orphan Location' })
       .expect(404);
+    expect(orphanRes.body.error).toContain('Travel plan not found');
 
     // invalid dates
     const planId = await createPlan();
-    await request(app.getHttpServer())
+    const invalidDateRes = await request(app.getHttpServer())
       .post(`/api/travel-plans/${planId}/locations`)
       .send({ name: 'Bad', arrival_date: '2025-06-10T10:00:00Z', departure_date: '2025-06-10T09:00:00Z' })
-      .expect(409);
+      .expect(400);
+    expect(invalidDateRes.body.error).toBe('Validation error');
+    expect(invalidDateRes.body.details).toContain('Departure date must be after arrival date');
 
     // invalid coordinates
-    await request(app.getHttpServer())
+    const invalidCoordRes = await request(app.getHttpServer())
       .post(`/api/travel-plans/${planId}/locations`)
       .send({ name: 'Bad Coords', latitude: 91 })
       .expect(400);
+    expect(invalidCoordRes.body.error).toBe('Validation error');
+    expect(invalidCoordRes.body.details).toContain('Latitude');
   });
 });
