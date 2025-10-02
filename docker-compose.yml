@@ -15,7 +15,9 @@ services:
       retries: 10
 
   api:
-    build: .
+    build:
+      context: .
+      target: production
     depends_on:
       postgres:
         condition: service_healthy
@@ -26,13 +28,13 @@ services:
       DB_PASS: postgres
       DB_NAME: travel_planner
       PORT: 3000
+      NODE_ENV: production
+    env_file:
+      - .env
     ports:
       - "3000:3000"
-    command: sh -c "npm run migration:run && npm run start:dev"
-    volumes:
-      - .:/app               # ✅ щоб live-reload працював
-      - /app/node_modules    # ✅ щоб не затирати node_modules
-      - ./.env:/app/.env:ro
+    command: sh -c "npm run migration:run && npm run start"
+    restart: unless-stopped
 
 volumes:
   pgdata:

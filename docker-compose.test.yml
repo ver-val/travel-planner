@@ -30,6 +30,7 @@ services:
       DB_USER: postgres
       DB_PASS: postgres
       DB_NAME: travel_planner_test
+      DATABASE_URL: postgres://postgres:postgres@db_test:5432/travel_planner_test
     command: >
       sh -c "
       npm run migration:run &&
