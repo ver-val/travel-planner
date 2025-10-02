@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "module": "commonjs",          // ✅ важливо: CLI TypeORM не дружить з ESM
+    "module": "commonjs",
     "target": "ES2021",
     "declaration": true,
     "emitDecoratorMetadata": true,
