@@ -4,7 +4,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { TravelPlan } from '../travel-plan.entity';
 import { Location } from '../../locations/location.entity';
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 
 const mockTravelPlanRepo = () => ({
   findAndCount: jest.fn(),
@@ -43,14 +43,14 @@ describe('TravelPlansService', () => {
 
       const result = await service.create(dto as any);
       expect(result).toEqual(plan);
-      expect(repo.create).toHaveBeenCalledWith({ ...dto, budget: '1000' });
+      expect(repo.create).toHaveBeenCalledWith(expect.objectContaining(dto));
       expect(repo.save).toHaveBeenCalled();
     });
 
     it('should throw if end_date is before start_date', async () => {
       await expect(
         service.create({ start_date: '2025-06-10', end_date: '2025-06-01' } as any),
-      ).rejects.toThrow(ConflictException);
+      ).rejects.toThrow(BadRequestException);
     });
   });
 
@@ -75,12 +75,14 @@ describe('TravelPlansService', () => {
   describe('update()', () => {
     it('should update a travel plan when version matches', async () => {
       const qb: any = {
+        update: jest.fn().mockReturnThis(),
         set: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
         returning: jest.fn().mockReturnThis(),
         execute: jest.fn().mockResolvedValue({ affected: 1, raw: [{ id: '1', version: 2 }] }),
       };
       repo.createQueryBuilder.mockReturnValue(qb);
+      repo.findOne.mockResolvedValue({ id: '1', version: 2 } as any);
 
       const result = await service.update('1', { version: 1, title: 'New Title' } as any);
       expect(result.version).toBe(2);
@@ -88,6 +90,7 @@ describe('TravelPlansService', () => {
 
     it('should throw ConflictException if version mismatch occurs', async () => {
       const qb: any = {
+        update: jest.fn().mockReturnThis(),
         set: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
         returning: jest.fn().mockReturnThis(),

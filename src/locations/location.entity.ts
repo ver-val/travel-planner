@@ -1,5 +1,6 @@
-import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn, VersionColumn } from 'typeorm';
 import { TravelPlan } from '../travel-plans/travel-plan.entity';
+import { NumericColumnTransformer } from '../common/transformers/numeric.transformer';
 
 @Entity({ name: 'locations' })
 @Index(['travel_plan_id', 'visit_order'], { unique: true })
@@ -10,7 +11,7 @@ export class Location {
   @Column('uuid')
   travel_plan_id!: string;
 
-  @JoinColumn({ name: 'travel_plan_id' }) // 👈 тут ключовий момент
+  @JoinColumn({ name: 'travel_plan_id' })
   @ManyToOne(() => TravelPlan, (plan) => plan.locations, { onDelete: 'CASCADE' })
   travel_plan!: TravelPlan;
 
@@ -20,11 +21,11 @@ export class Location {
   @Column({ type: 'text', nullable: true })
   address?: string | null;
 
-  @Column({ type: 'decimal', precision: 10, scale: 6, nullable: true })
-  latitude?: string | null;
+  @Column({ type: 'decimal', precision: 10, scale: 6, nullable: true, transformer: new NumericColumnTransformer() })
+  latitude?: number | null;
 
-  @Column({ type: 'decimal', precision: 11, scale: 6, nullable: true })
-  longitude?: string | null;
+  @Column({ type: 'decimal', precision: 11, scale: 6, nullable: true, transformer: new NumericColumnTransformer() })
+  longitude?: number | null;
 
   @Column({ type: 'int', nullable: true }) // auto assigned by trigger if null
   visit_order?: number | null;
@@ -35,7 +36,7 @@ export class Location {
   @Column({ type: 'timestamptz', nullable: true })
   departure_date?: Date | null;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true, transformer: new NumericColumnTransformer() })
   budget?: number | null;
 
   @Column({ type: 'text', nullable: true })
@@ -43,4 +44,10 @@ export class Location {
 
   @CreateDateColumn({ type: 'timestamptz' })
   created_at!: Date;
+
+  @UpdateDateColumn({ type: 'timestamptz' })
+  updated_at!: Date;
+
+  @VersionColumn({ default: 1 })
+  version!: number;
 }

@@ -1,11 +1,12 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsBoolean, IsDateString, IsDecimal, IsIn, IsInt, IsNumber, IsOptional, IsPositive, IsString, Length, Matches, MaxLength, Min } from 'class-validator';
+import { IsBoolean, IsDateString, IsDefined, IsInt, IsNumber, IsOptional, IsPositive, IsString, Matches, MaxLength, Min } from 'class-validator';
 
 export class CreateTravelPlanDto {
   @ApiProperty({ maxLength: 200 })
+  @IsDefined({ message: 'Title is required' })
   @IsString()
-  @MaxLength(200)
+  @MaxLength(200, { message: 'Title must be at most 200 characters' })
   @Matches(/.*\S.*/, { message: 'Title is required' })
   title!: string;
 
@@ -28,7 +29,7 @@ export class CreateTravelPlanDto {
   @IsOptional()
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
-  @Min(0)
+  @Min(0, { message: 'Budget must be positive' })
   budget?: number;
 
   @ApiPropertyOptional({ example: 'USD' })
@@ -46,7 +47,7 @@ export class UpdateTravelPlanDto {
   @ApiPropertyOptional({ maxLength: 200 })
   @IsOptional()
   @IsString()
-  @MaxLength(200)
+  @MaxLength(200, { message: 'Title must be at most 200 characters' })
   @Matches(/(^$)|(^.*\S.*$)/, { message: 'Title cannot be empty' })
   title?: string;
 
@@ -59,11 +60,13 @@ export class UpdateTravelPlanDto {
   @IsOptional()
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
-  @Min(0)
+  @Min(0, { message: 'Budget must be positive' })
   budget?: number;
 
   @ApiProperty({ description: 'Current entity version for optimistic locking' })
-  @IsInt({ message: 'Version is required' })
+  @IsDefined({ message: 'Version is required' })
+  @Type(() => Number)
+  @IsInt({ message: 'Version must be an integer' })
   @IsPositive({ message: 'Version must be positive' })
   version!: number;
 }
