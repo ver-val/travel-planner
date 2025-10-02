@@ -47,7 +47,7 @@ Content-Type: application/json
 HTTP 409
 [Asserts]
 jsonpath "$.error" contains "Conflict"
-jsonpath "$.version" == 2
+jsonpath "$.current_version" == 2
 
 # Strategy 2: Stress Test Location Auto-Ordering
 # Rapidly create multiple locations to test concurrent insertion
@@ -90,6 +90,9 @@ GET {{host}}/api/travel-plans/{{race_plan_id}}
 HTTP 200
 [Asserts]
 jsonpath "$.locations" count == 3
+jsonpath "$.locations[0].visit_order" == 1
+jsonpath "$.locations[1].visit_order" == 2
+jsonpath "$.locations[2].visit_order" == 3
 
 # Strategy 3: Cascade Delete Race Condition Test
 DELETE {{host}}/api/travel-plans/{{race_plan_id}}

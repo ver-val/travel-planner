@@ -27,6 +27,7 @@ Content-Type: application/json
 HTTP 201
 [Captures]
 location1_id: jsonpath "$.id"
+location1_version: jsonpath "$.version"
 
 [Asserts]
 jsonpath "$.name" == "Eiffel Tower"
@@ -84,7 +85,8 @@ Content-Type: application/json
 {
   "name": "Eiffel Tower (Night Visit)",
   "budget": 30.00,
-  "notes": "Amazing night illumination"
+  "notes": "Amazing night illumination",
+  "version": {{location1_version}}
 }
 
 HTTP 200
