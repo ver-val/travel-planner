@@ -386,6 +386,17 @@ HTTP 400
 [Asserts]
 jsonpath "$.error" contains "Invalid UUID format"
 
+# Test 28: Malformed JSON request
+POST {{host}}/api/travel-plans
+Content-Type: application/json
+```json
+{
+  "title": "Malformed JSON",
+  "budget": 1000.00,
+  "invalid_json":
+}
+```
+
 # Test 29: Boundary test - exact limits
 POST {{host}}/api/travel-plans
 Content-Type: application/json
