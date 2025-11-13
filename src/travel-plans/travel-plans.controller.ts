@@ -44,4 +44,11 @@ export class TravelPlansController {
   async remove(@Param('id', new UuidPipe()) id: string): Promise<void> {
     await this.service.remove(id);
   }
+
+  @Delete()
+  @ApiResponse({ status: 204 })
+  @HttpCode(204)
+  async removeAll(): Promise<void> {
+    await this.service.removeAll();
+  }
 }
