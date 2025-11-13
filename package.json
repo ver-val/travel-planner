@@ -5,6 +5,8 @@
   "description": "REST API for collaborative travel planning with optimistic locking (NestJS + PostgreSQL)",
   "license": "MIT",
   "scripts": {
+    "db:setup": "bash ./scripts/setup-postgres.sh",
+    "db:teardown": "bash ./scripts/teardown-postgres.sh",
     "prebuild": "rimraf dist",
     "build": "nest build",
     "start": "node dist/src/main.js",

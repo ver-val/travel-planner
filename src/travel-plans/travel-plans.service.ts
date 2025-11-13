@@ -47,13 +47,36 @@ export class TravelPlansService {
 
   async update(id: string, dto: UpdateTravelPlanDto): Promise<TravelPlan> {
     this.logger.debug(`Updating travel plan id=${id} version=${dto.version}`);
+
+    if (dto.start_date !== undefined || dto.end_date !== undefined) {
+      const current = await this.repo.findOne({ where: { id } });
+      if (!current) {
+        throw new NotFoundException('Travel plan not found');
+      }
+
+      const nextStart = dto.start_date !== undefined ? dto.start_date : current.start_date ?? undefined;
+      const nextEnd = dto.end_date !== undefined ? dto.end_date : current.end_date ?? undefined;
+
+      if (nextStart && nextEnd && new Date(nextEnd) < new Date(nextStart)) {
+        throw new BadRequestException({ error: 'Validation error', details: 'End date must be after start date' });
+      }
+    }
+
+    const updatePayload: Partial<TravelPlan> = {
+      ...(dto.title !== undefined ? { title: dto.title } : {}),
+      ...(dto.description !== undefined ? { description: dto.description } : {}),
+      ...(dto.start_date !== undefined ? { start_date: dto.start_date } : {}),
+      ...(dto.end_date !== undefined ? { end_date: dto.end_date } : {}),
+      ...(dto.budget !== undefined ? { budget: dto.budget } : {}),
+      ...(dto.currency !== undefined ? { currency: dto.currency } : {}),
+      ...(dto.is_public !== undefined ? { is_public: dto.is_public } : {}),
+    };
+
     const qb = this.repo
       .createQueryBuilder()
       .update(TravelPlan)
       .set({
-        ...(dto.title !== undefined ? { title: dto.title } : {}),
-        ...(dto.description !== undefined ? { description: dto.description } : {}),
-        ...(dto.budget !== undefined ? { budget: dto.budget } : {}),
+        ...updatePayload,
         version: () => '"version" + 1',
       })
       .where('id = :id AND version = :version', { id, version: dto.version })
