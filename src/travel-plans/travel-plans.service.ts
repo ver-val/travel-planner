@@ -13,10 +13,12 @@ import {
   CreateTravelPlanDto,
   UpdateTravelPlanDto,
 } from './dto/create-travel-plan.dto';
+import { NumericColumnTransformer } from '../common/transformers/numeric.transformer';
 
 @Injectable()
 export class TravelPlansService {
   private readonly logger = new Logger(TravelPlansService.name);
+  private readonly numericTransformer = new NumericColumnTransformer();
 
   constructor(
     @InjectRepository(TravelPlan)
@@ -150,8 +152,21 @@ async update(id: string, dto: UpdateTravelPlanDto): Promise<TravelPlan> {
       });
     }
 
+    const updatedRaw = result.raw[0];
 
-    const updated: TravelPlan = result.raw[0];
+    if (!updatedRaw) {
+      throw new NotFoundException('Travel plan not found after update');
+    }
+
+    const updated: TravelPlan = {
+      ...updatedRaw,
+      ...(updatedRaw.budget !== undefined && {
+        budget:
+          typeof updatedRaw.budget === 'string'
+            ? this.numericTransformer.from(updatedRaw.budget)
+            : updatedRaw.budget,
+      }),
+    };
 
     this.logger.debug(
       `Travel plan updated id=${id} newVersion=${updated.version}`,
