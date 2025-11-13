@@ -56,12 +56,32 @@ export class UpdateTravelPlanDto {
   @IsString()
   description?: string;
 
+  @ApiPropertyOptional({ type: String, format: 'date' })
+  @IsOptional()
+  @IsDateString()
+  start_date?: string | null;
+
+  @ApiPropertyOptional({ type: String, format: 'date' })
+  @IsOptional()
+  @IsDateString()
+  end_date?: string | null;
+
   @ApiPropertyOptional({ type: Number, example: 2500.00 })
   @IsOptional()
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0, { message: 'Budget must be positive' })
   budget?: number;
+
+  @ApiPropertyOptional({ example: 'USD' })
+  @IsOptional()
+  @Matches(/^[A-Z]{3}$/, { message: 'Currency must be 3 uppercase letters' })
+  currency?: string;
+
+  @ApiPropertyOptional({ default: false })
+  @IsOptional()
+  @IsBoolean()
+  is_public?: boolean;
 
   @ApiProperty({ description: 'Current entity version for optimistic locking' })
   @IsDefined({ message: 'Version is required' })
