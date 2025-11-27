@@ -1,40 +1,74 @@
 services:
   postgres:
-    image: postgres:16-alpine
+    image: postgres:15-alpine
+    container_name: travel_planner_db
+    restart: unless-stopped
     environment:
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: travel_planner
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASS:-postgres}
+      POSTGRES_DB: ${DB_NAME:-travel_planner}
     ports:
-      - "5432:5432"
+      - "${DB_PORT:-5432}:5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-travel_planner}"]
       interval: 5s
-      timeout: 5s
-      retries: 10
+      timeout: 3s
+      retries: 5
 
   api:
     build:
       context: .
+      dockerfile: Dockerfile
       target: production
+    container_name: travel_planner_api
+    restart: unless-stopped
+    command: >
+      sh -c "
+      npm run migration:run &&
+      npm run start
+      "
+    env_file:
+      - .env
+    environment:
+      PORT: ${PORT:-3000}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASS: ${DB_PASS:-postgres}
+      DB_NAME: ${DB_NAME:-travel_planner}
+      DATABASE_URL: postgres://${DB_USER:-postgres}:${DB_PASS:-postgres}@postgres:5432/${DB_NAME:-travel_planner}
+    ports:
+      - "${APP_PORT:-3000}:3000"
     depends_on:
       postgres:
         condition: service_healthy
-    environment:
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_USER: postgres
-      DB_PASS: postgres
-      DB_NAME: travel_planner
-      PORT: 3000
-      NODE_ENV: production
-    env_file:
-      - .env
-    ports:
-      - "3000:3000"
-    command: sh -c "npm run migration:run && npm run start"
-    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider --quiet http://localhost:3000/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    volumes:
+      - app_logs:/app/logs
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /app/tmp
 
 volumes:
-  pgdata:
+  postgres_data:
+  app_logs:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./logs
