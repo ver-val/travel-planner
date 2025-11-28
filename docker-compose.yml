@@ -7,6 +7,8 @@ services:
       POSTGRES_USER: ${DB_USER:-postgres}
       POSTGRES_PASSWORD: ${DB_PASS:-postgres}
       POSTGRES_DB: ${DB_NAME:-travel_planner}
+      REPLICATION_USER: ${REPLICATION_USER:-repuser}
+      REPLICATION_PASSWORD: ${REPLICATION_PASSWORD:-repuser}
     command:
       - "postgres"
       - "-c"
