@@ -64,6 +64,34 @@ services:
       postgres:
         condition: service_healthy
 
+  postgres_sub_2:
+    image: postgres:15-alpine
+    container_name: travel_planner_replica_2
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASS:-postgres}
+      POSTGRES_DB: ${DB_NAME:-travel_planner}
+      REPLICATION_USER: ${REPLICATION_USER:-repuser}
+      REPLICATION_PASSWORD: ${REPLICATION_PASSWORD:-repuser}
+      PRIMARY_HOST: postgres
+      PRIMARY_PORT: 5432
+      REPLICATION_SLOT: standby_slot_2
+      APPLICATION_NAME: travel_planner_replica_2
+    ports:
+      - "56432:5432"
+    volumes:
+      - postgres_replica2_data:/var/lib/postgresql/data
+      - ./db/replications/subscriber:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-travel_planner}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   api:
     build:
       context: .
@@ -114,6 +142,7 @@ services:
 volumes:
   postgres_data:
   postgres_replica_data:
+  postgres_replica2_data:
   app_logs:
     driver: local
     driver_opts:
