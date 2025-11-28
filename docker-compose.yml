@@ -45,6 +45,7 @@ services:
       PRIMARY_HOST: postgres
       PRIMARY_PORT: 5432
       REPLICATION_SLOT: standby_slot
+      APPLICATION_NAME: travel_planner_replica
     ports:
       - "55432:5432"
     volumes:

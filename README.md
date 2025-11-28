@@ -92,6 +92,48 @@ This prevents concurrent travellers from overwriting each other’s data.
 
 ---
 
+## Physical Replication (async → optional sync)
+
+The compose setup runs a primary (`postgres`) plus a standby (`postgres_sub`) using physical streaming
+replication. Default start is **asynchronous** to avoid bootstrap deadlocks; you can switch to
+**synchronous** once both nodes are up.
+
+Bring up cleanly:
+
+```bash
+docker compose down -v
+docker compose up --build
+```
+
+Verify standby is in recovery:
+
+```bash
+docker compose exec postgres_sub psql -U postgres -d travel_planner -c "SELECT pg_is_in_recovery();"
+```
+
+Check replication stream on primary:
+
+```bash
+docker compose exec postgres psql -U postgres -d postgres -c \
+"SELECT application_name, state, sync_state FROM pg_stat_replication;"
+```
+
+Enable synchronous mode (after standby is connected):
+
+```bash
+docker compose exec postgres psql -U postgres -d postgres -c \
+"ALTER SYSTEM SET synchronous_standby_names='FIRST 1 (travel_planner_replica)';"
+docker compose exec postgres psql -U postgres -d postgres -c \
+"ALTER SYSTEM SET synchronous_commit='remote_apply';"
+docker compose exec postgres psql -U postgres -d postgres -c "SELECT pg_reload_conf();"
+```
+
+Confirm `sync_state` becomes `sync` on primary. Standby stays in recovery (`pg_is_in_recovery() = t`);
+you can watch WAL apply lag on the standby with
+`SELECT pg_last_wal_receive_lsn(), pg_last_wal_replay_lsn();`.
+
+---
+
 ## Testing Strategy
 
 - **Unit** (`npm test`): service-level logic with repository mocks.
