@@ -1,5 +1,0 @@
-CREATE TABLE IF NOT EXISTS migrations (
-    id SERIAL PRIMARY KEY,
-    timestamp BIGINT NOT NULL,
-    name VARCHAR NOT NULL
-);
