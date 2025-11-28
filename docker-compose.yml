@@ -7,15 +7,70 @@ services:
       POSTGRES_USER: ${DB_USER:-postgres}
       POSTGRES_PASSWORD: ${DB_PASS:-postgres}
       POSTGRES_DB: ${DB_NAME:-travel_planner}
+    command:
+      - "postgres"
+      - "-c"
+      - "listen_addresses=*"
+      - "-c"
+      - "wal_level=logical"
+      - "-c"
+      - "max_replication_slots=10"
+      - "-c"
+      - "max_wal_senders=10"
+      - "-c"
+      - "max_logical_replication_workers=4"
+      - "-c"
+      - "max_worker_processes=10"
     ports:
       - "${DB_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./db/migrations:/docker-entrypoint-migrations:ro
+      - ./db/replications/publisher:/docker-entrypoint-replications:ro
+      - ./db/replications/common:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-travel_planner}"]
       interval: 5s
       timeout: 3s
       retries: 5
+
+  postgres_sub:
+    image: postgres:15-alpine
+    container_name: travel_planner_replica
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASS:-postgres}
+      POSTGRES_DB: ${DB_NAME:-travel_planner}
+    command:
+      - "postgres"
+      - "-c"
+      - "listen_addresses=*"
+      - "-c"
+      - "wal_level=logical"
+      - "-c"
+      - "max_replication_slots=10"
+      - "-c"
+      - "max_wal_senders=10"
+      - "-c"
+      - "max_logical_replication_workers=4"
+      - "-c"
+      - "max_worker_processes=10"
+    ports:
+      - "55432:5432"
+    volumes:
+      - postgres_replica_data:/var/lib/postgresql/data
+      - ./db/migrations:/docker-entrypoint-migrations:ro
+      - ./db/replications/subscriber:/docker-entrypoint-replications:ro
+      - ./db/replications/common:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-travel_planner}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   api:
     build:
@@ -66,6 +121,7 @@ services:
 
 volumes:
   postgres_data:
+  postgres_replica_data:
   app_logs:
     driver: local
     driver_opts:
