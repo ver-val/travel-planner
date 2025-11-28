@@ -30,7 +30,7 @@ COPY --from=base /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY package*.json ./
 COPY --from=build /app/ormconfig.ts ./ormconfig.ts
-COPY --from=build /app/migrations ./migrations
+COPY --from=build /app/db ./db
 COPY --from=build /app/tsconfig*.json ./
 COPY --from=build /app/src ./src
 

@@ -15,5 +15,5 @@ export default new DataSource({
   synchronize: false,
   logging: true,
   entities: [TravelPlan, Location],
-  migrations: ['migrations/*.ts'],
+  migrations: ['db/migrations/*.ts'],
 });
