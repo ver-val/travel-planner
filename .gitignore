@@ -83,6 +83,9 @@ pgdata/
 dump.sql
 *.sql
 
+# Allow tracked SQL only for replication scripts
+!db/replications/**/*.sql
+
 # --------------------------------------------------
 # Build outputs (for container builds)
 # --------------------------------------------------

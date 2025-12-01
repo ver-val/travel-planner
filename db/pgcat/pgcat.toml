@@ -1,0 +1,36 @@
+[general]
+host = "0.0.0.0"
+port = 6432
+log_level = "info"
+admin_username = "@@PGCAT_ADMIN_USERNAME@@"
+admin_password = "@@PGCAT_ADMIN_PASSWORD@@"
+connect_timeout = 3000
+idle_timeout = 60000
+enable_prometheus_exporter = true
+prometheus_exporter_port = 9930
+
+[pools.travel_planner]
+pool_mode = "transaction"
+pool_size = 10
+min_pool_size = 0
+max_pool_size = 100
+query_parser_enabled = true
+query_parser_read_write_splitting = true
+default_role = "primary"
+primary_reads_enabled = true
+load_balancing_mode = "LeastOutstandingConnections"
+user = "@@DB_USER@@"
+password = "@@DB_PASS@@"
+
+[pools.travel_planner.shards.0]
+servers = [
+  { host = "postgres", port = 5432, role = "primary" },
+  { host = "postgres_sub", port = 5432, role = "replica" },
+  { host = "postgres_sub_2", port = 5432, role = "replica" },
+]
+database = "travel_planner"
+
+[pools.travel_planner.users.postgres]
+username = "@@DB_USER@@"
+password = "@@DB_PASS@@"
+pool_size = 10

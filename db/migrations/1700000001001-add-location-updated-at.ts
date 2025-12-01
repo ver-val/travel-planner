@@ -4,10 +4,10 @@ export class AddLocationUpdatedAt1700000001001 implements MigrationInterface {
   name = 'AddLocationUpdatedAt1700000001001';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query('ALTER TABLE "locations" ADD COLUMN "updated_at" TIMESTAMPTZ NOT NULL DEFAULT now()');
+    await queryRunner.query('ALTER TABLE "locations" ADD COLUMN IF NOT EXISTS "updated_at" TIMESTAMPTZ NOT NULL DEFAULT now()');
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query('ALTER TABLE "locations" DROP COLUMN "updated_at"');
+    await queryRunner.query('ALTER TABLE "locations" DROP COLUMN IF EXISTS "updated_at"');
   }
 }
