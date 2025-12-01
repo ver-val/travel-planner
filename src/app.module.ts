@@ -14,8 +14,8 @@ import { HealthModule } from './health/health.module';
       useFactory: () => ({
         type: 'postgres',
         url: process.env.DATABASE_URL || undefined,
-        host: process.env.DB_HOST || 'localhost',
-        port: +(process.env.DB_PORT || 5432),
+        host: process.env.DB_HOST || 'pgcat',
+        port: +(process.env.DB_PORT || 6432),
         username: process.env.DB_USER || 'postgres',
         password: process.env.DB_PASS || 'postgres',
         database: process.env.DB_NAME || 'travel_planner',

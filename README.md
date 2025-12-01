@@ -20,7 +20,7 @@ showcases ordered travel locations, optimistic locking, and thorough validation.
 
 ```bash
 cp .env.example .env
-# Ensure ports 3000/5432 are free
+# Ensure ports 3000, primary Postgres host port (`DB_PORT_EXPOSE`, default 5432), and PgCat host ports (`PGCAT_PORT`, `PGCAT_ADMIN_PORT`; defaults 6432/9930) are free.
 docker compose up --build
 
 # Swagger UI http://localhost:3000/docs
@@ -56,8 +56,8 @@ npm run start:dev        # Nest watch mode
 > `swagger:export` spins up the Nest application to gather metadata. Because repositories are
 > TypeORM-backed, an actual database connection is still required. Bring up Postgres (e.g.
 > `docker compose up postgres`) before running the export. When executing outside Docker, the
-> script automatically ignores `DATABASE_URL` if it still points at the compose host (`postgres`) so
-> that `DB_HOST`/`DB_PORT` are used instead.
+> script automatically ignores `DATABASE_URL` if it still points at the compose host (`postgres` or
+> `pgcat`) so that `DB_HOST`/`DB_PORT` are used instead.
 
 ---
 
@@ -85,6 +85,8 @@ This prevents concurrent travellers from overwriting each other’s data.
 
 ## Database Notes
 
+- PgCat proxies all application traffic on `pgcat:6432`, routing writes to the primary (`postgres`)
+  and balancing read queries across both replicas.
 - UUIDs are generated via PostgreSQL `pgcrypto` (`gen_random_uuid()`).
 - Trigger-based logic assigns `visit_order` when omitted.
 - `locations` table now includes both `updated_at` and `version` columns for full auditing.

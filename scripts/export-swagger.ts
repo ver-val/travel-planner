@@ -7,13 +7,14 @@ import { writeFileSync, mkdirSync } from 'fs';
 async function exportSwagger() {
   try {
     // When running outside Docker, DATABASE_URL may still point to the compose
-    // service host (e.g. "postgres"). In that case drop the URL so TypeORM
+    // service host (e.g. "postgres" or "pgcat"). In that case drop the URL so TypeORM
     // falls back to discrete DB_* vars.
     const dbUrl = process.env.DATABASE_URL;
     if (dbUrl) {
       try {
         const parsed = new URL(dbUrl);
-        if (parsed.hostname === 'postgres' && process.env.DB_HOST) {
+        const containerHosts = new Set(['postgres', 'pgcat']);
+        if (containerHosts.has(parsed.hostname) && process.env.DB_HOST) {
           delete process.env.DATABASE_URL;
         }
       } catch {

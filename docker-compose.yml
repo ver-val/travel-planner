@@ -22,8 +22,20 @@ services:
       - "max_wal_senders=10"
       - "-c"
       - "wal_keep_size=64"
+      - "-c"
+      - "log_destination=stderr"
+      - "-c"
+      - "logging_collector=off"
+      - "-c"
+      - "log_connections=on"
+      - "-c"
+      - "log_disconnections=on"
+      - "-c"
+      - "log_replication_commands=on"
+      - "-c"
+      - "log_statement=all"
     ports:
-      - "${DB_PORT:-5432}:5432"
+      - "${DB_PORT_EXPOSE:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./db/migrations:/docker-entrypoint-migrations:ro
@@ -50,6 +62,20 @@ services:
       PRIMARY_PORT: 5432
       REPLICATION_SLOT: standby_slot
       APPLICATION_NAME: travel_planner_replica
+    command:
+      - "postgres"
+      - "-c"
+      - "log_destination=stderr"
+      - "-c"
+      - "logging_collector=off"
+      - "-c"
+      - "log_connections=on"
+      - "-c"
+      - "log_disconnections=on"
+      - "-c"
+      - "log_replication_commands=on"
+      - "-c"
+      - "log_statement=all"
     ports:
       - "55432:5432"
     volumes:
@@ -78,6 +104,20 @@ services:
       PRIMARY_PORT: 5432
       REPLICATION_SLOT: standby_slot_2
       APPLICATION_NAME: travel_planner_replica_2
+    command:
+      - "postgres"
+      - "-c"
+      - "log_destination=stderr"
+      - "-c"
+      - "logging_collector=off"
+      - "-c"
+      - "log_connections=on"
+      - "-c"
+      - "log_disconnections=on"
+      - "-c"
+      - "log_replication_commands=on"
+      - "-c"
+      - "log_statement=all"
     ports:
       - "56432:5432"
     volumes:
@@ -92,6 +132,37 @@ services:
       postgres:
         condition: service_healthy
 
+  pgcat:
+    image: ghcr.io/postgresml/pgcat:latest
+    container_name: travel_planner_pgcat
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      PGCAT_ADMIN_USERNAME: ${PGCAT_ADMIN_USERNAME:-pgcat_admin}
+      PGCAT_ADMIN_PASSWORD: ${PGCAT_ADMIN_PASSWORD:-pgcat_admin_pass}
+    ports:
+      - "${PGCAT_PORT:-6432}:6432"
+      - "${PGCAT_ADMIN_PORT:-9930}:9930"
+    volumes:
+      - ./db/pgcat/pgcat.toml:/etc/pgcat/pgcat.toml:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      postgres_sub:
+        condition: service_healthy
+      postgres_sub_2:
+        condition: service_healthy
+    command: >
+      sh -c "
+      admin_user=${PGCAT_ADMIN_USERNAME:-pgcat_admin};
+      admin_pass=${PGCAT_ADMIN_PASSWORD:-pgcat_admin_pass};
+      db_user=${DB_USER:-postgres};
+      db_pass=${DB_PASS:-postgres};
+      sed -e \"s|@@PGCAT_ADMIN_USERNAME@@|$$admin_user|g\" -e \"s|@@PGCAT_ADMIN_PASSWORD@@|$$admin_pass|g\" -e \"s|@@DB_USER@@|$$db_user|g\" -e \"s|@@DB_PASS@@|$$db_pass|g\" /etc/pgcat/pgcat.toml > /etc/pgcat/pgcat.resolved.toml &&
+      exec pgcat /etc/pgcat/pgcat.resolved.toml
+      "
+
   api:
     build:
       context: .
@@ -101,24 +172,24 @@ services:
     restart: unless-stopped
     command: >
       sh -c "
-      npm run migration:run &&
+      DB_HOST=postgres DB_PORT=5432 DATABASE_URL=postgres://${DB_USER:-postgres}:${DB_PASS:-postgres}@postgres:5432/${DB_NAME:-travel_planner} npm run migration:run &&
       npm run start
       "
     env_file:
       - .env
     environment:
       PORT: ${PORT:-3000}
-      DB_HOST: postgres
-      DB_PORT: 5432
+      DB_HOST: pgcat
+      DB_PORT: 6432
       DB_USER: ${DB_USER:-postgres}
       DB_PASS: ${DB_PASS:-postgres}
       DB_NAME: ${DB_NAME:-travel_planner}
-      DATABASE_URL: postgres://${DB_USER:-postgres}:${DB_PASS:-postgres}@postgres:5432/${DB_NAME:-travel_planner}
+      DATABASE_URL: postgres://${DB_USER:-postgres}:${DB_PASS:-postgres}@pgcat:6432/${DB_NAME:-travel_planner}
     ports:
       - "${APP_PORT:-3000}:3000"
     depends_on:
-      postgres:
-        condition: service_healthy
+      pgcat:
+        condition: service_started
     healthcheck:
       test: ["CMD-SHELL", "wget --spider --quiet http://localhost:3000/api/health || exit 1"]
       interval: 10s

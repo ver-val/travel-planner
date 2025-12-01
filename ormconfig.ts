@@ -7,8 +7,8 @@ dotenv.config();
 
 export default new DataSource({
   type: 'postgres',
-  host: process.env.DB_HOST || 'localhost',
-  port: Number(process.env.DB_PORT) || 5432,
+  host: process.env.DB_HOST || 'pgcat',
+  port: Number(process.env.DB_PORT) || 6432,
   username: process.env.DB_USER || 'postgres',
   password: process.env.DB_PASS || 'postgres',
   database: process.env.DB_NAME || 'travel_planner',
