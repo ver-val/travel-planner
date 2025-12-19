@@ -1,10 +1,10 @@
 import { Module } from '@nestjs/common';
 import { TerminusModule } from '@nestjs/terminus';
-import { TypeOrmModule } from '@nestjs/typeorm';
 import { HealthController } from './health.controller';
+import { ShardingModule } from '../common/sharding/sharding.module';
 
 @Module({
-  imports: [TerminusModule, TypeOrmModule],
+  imports: [TerminusModule, ShardingModule],
   controllers: [HealthController],
 })
 export class HealthModule {}

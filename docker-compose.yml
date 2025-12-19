@@ -1,6 +1,7 @@
 services:
   postgres:
     image: postgres:15-alpine
+    profiles: ["disabled"] # legacy single-instance stack (not used for sharding)
     container_name: travel_planner_db
     restart: unless-stopped
     environment:
@@ -49,6 +50,7 @@ services:
 
   postgres_sub:
     image: postgres:15-alpine
+    profiles: ["disabled"]
     container_name: travel_planner_replica
     restart: unless-stopped
     environment:
@@ -92,6 +94,7 @@ services:
 
   postgres_sub_2:
     image: postgres:15-alpine
+    profiles: ["disabled"]
     container_name: travel_planner_replica_2
     restart: unless-stopped
     environment:
@@ -132,8 +135,117 @@ services:
       postgres:
         condition: service_healthy
 
+  postgres_00:
+    image: postgres:15-alpine
+    container_name: travel_planner_shard_00
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASS:-postgres}
+    command:
+      - "postgres"
+      - "-c"
+      - "log_destination=stderr"
+      - "-c"
+      - "logging_collector=off"
+      - "-c"
+      - "log_connections=on"
+      - "-c"
+      - "log_disconnections=on"
+    volumes:
+      - postgres_shard00_data:/var/lib/postgresql/data
+      - ./db/shards/postgres_00:/docker-entrypoint-initdb.d:ro
+      - ./db/shards/schema:/schema:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  postgres_01:
+    image: postgres:15-alpine
+    container_name: travel_planner_shard_01
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASS:-postgres}
+    command:
+      - "postgres"
+      - "-c"
+      - "log_destination=stderr"
+      - "-c"
+      - "logging_collector=off"
+      - "-c"
+      - "log_connections=on"
+      - "-c"
+      - "log_disconnections=on"
+    volumes:
+      - postgres_shard01_data:/var/lib/postgresql/data
+      - ./db/shards/postgres_01:/docker-entrypoint-initdb.d:ro
+      - ./db/shards/schema:/schema:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  postgres_02:
+    image: postgres:15-alpine
+    container_name: travel_planner_shard_02
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASS:-postgres}
+    command:
+      - "postgres"
+      - "-c"
+      - "log_destination=stderr"
+      - "-c"
+      - "logging_collector=off"
+      - "-c"
+      - "log_connections=on"
+      - "-c"
+      - "log_disconnections=on"
+    volumes:
+      - postgres_shard02_data:/var/lib/postgresql/data
+      - ./db/shards/postgres_02:/docker-entrypoint-initdb.d:ro
+      - ./db/shards/schema:/schema:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  postgres_03:
+    image: postgres:15-alpine
+    container_name: travel_planner_shard_03
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASS:-postgres}
+    command:
+      - "postgres"
+      - "-c"
+      - "log_destination=stderr"
+      - "-c"
+      - "logging_collector=off"
+      - "-c"
+      - "log_connections=on"
+      - "-c"
+      - "log_disconnections=on"
+    volumes:
+      - postgres_shard03_data:/var/lib/postgresql/data
+      - ./db/shards/postgres_03:/docker-entrypoint-initdb.d:ro
+      - ./db/shards/schema:/schema:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   pgcat:
     image: ghcr.io/postgresml/pgcat:latest
+    profiles: ["disabled"]
     container_name: travel_planner_pgcat
     restart: unless-stopped
     env_file:
@@ -170,11 +282,7 @@ services:
       target: production
     container_name: travel_planner_api
     restart: unless-stopped
-    command: >
-      sh -c "
-      DB_HOST=postgres DB_PORT=5432 DATABASE_URL=postgres://${DB_USER:-postgres}:${DB_PASS:-postgres}@postgres:5432/${DB_NAME:-travel_planner} npm run migration:run &&
-      npm run start
-      "
+    command: ["npm", "run", "start"]
     env_file:
       - .env
     environment:
@@ -188,8 +296,14 @@ services:
     ports:
       - "${APP_PORT:-3000}:3000"
     depends_on:
-      pgcat:
-        condition: service_started
+      postgres_00:
+        condition: service_healthy
+      postgres_01:
+        condition: service_healthy
+      postgres_02:
+        condition: service_healthy
+      postgres_03:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget --spider --quiet http://localhost:3000/api/health || exit 1"]
       interval: 10s
@@ -214,6 +328,10 @@ volumes:
   postgres_data:
   postgres_replica_data:
   postgres_replica2_data:
+  postgres_shard00_data:
+  postgres_shard01_data:
+  postgres_shard02_data:
+  postgres_shard03_data:
   app_logs:
     driver: local
     driver_opts:

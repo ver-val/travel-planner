@@ -1,37 +1,44 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { TravelPlansService } from '../travel-plans.service';
-import { getRepositoryToken } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { TravelPlan } from '../travel-plan.entity';
-import { Location } from '../../locations/location.entity';
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import { TravelPlansService } from '../travel-plans.service';
 
-const mockTravelPlanRepo = () => ({
-  findAndCount: jest.fn(),
-  create: jest.fn(),
-  save: jest.fn(),
-  findOne: jest.fn(),
-  createQueryBuilder: jest.fn(),
-  delete: jest.fn(),
+const createRepo = () => {
+  const manager = {
+    delete: jest.fn(),
+  };
+  const repo: any = {
+    find: jest.fn(),
+    findOne: jest.fn(),
+    findAndCount: jest.fn(),
+    create: jest.fn(),
+    save: jest.fn(),
+    createQueryBuilder: jest.fn(),
+    count: jest.fn(),
+  };
+  repo.manager = {
+    ...manager,
+    transaction: jest.fn(async (cb: any) => cb(manager)),
+  };
+  return repo;
+};
+
+const mockSharding = (repo: any) => ({
+  getAllPlanRepositories: jest.fn().mockResolvedValue([{ shardKey: 'a', repo }]),
+  getRepositoriesForPlan: jest.fn().mockResolvedValue({
+    shardKey: 'a',
+    planRepo: repo,
+    locationRepo: {} as any,
+  }),
 });
 
-const mockLocationRepo = () => ({});
-
-describe('TravelPlansService', () => {
+describe('TravelPlansService (sharded)', () => {
   let service: TravelPlansService;
-  let repo: jest.Mocked<Repository<TravelPlan>>;
+  let repo: any;
+  let sharding: any;
 
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        TravelPlansService,
-        { provide: getRepositoryToken(TravelPlan), useFactory: mockTravelPlanRepo },
-        { provide: getRepositoryToken(Location), useFactory: mockLocationRepo },
-      ],
-    }).compile();
-
-    service = module.get<TravelPlansService>(TravelPlansService);
-    repo = module.get(getRepositoryToken(TravelPlan));
+  beforeEach(() => {
+    repo = createRepo();
+    sharding = mockSharding(repo);
+    service = new TravelPlansService(sharding as any);
   });
 
   describe('create()', () => {
@@ -105,12 +112,12 @@ describe('TravelPlansService', () => {
 
   describe('remove()', () => {
     it('should delete a travel plan successfully', async () => {
-      repo.delete.mockResolvedValue({ affected: 1 } as any);
+      repo.manager.delete.mockResolvedValue({ affected: 1 } as any);
       await expect(service.remove('1')).resolves.not.toThrow();
     });
 
     it('should throw NotFoundException if travel plan does not exist', async () => {
-      repo.delete.mockResolvedValue({ affected: 0 } as any);
+      repo.manager.delete.mockResolvedValue({ affected: 0 } as any);
       await expect(service.remove('404')).rejects.toThrow(NotFoundException);
     });
   });

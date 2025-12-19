@@ -1,0 +1,20 @@
+{
+  "virtualNodes": {
+    "0": { "url": "postgres://postgres:postgres@postgres_00:5432/db_0" },
+    "1": { "url": "postgres://postgres:postgres@postgres_00:5432/db_1" },
+    "2": { "url": "postgres://postgres:postgres@postgres_00:5432/db_2" },
+    "3": { "url": "postgres://postgres:postgres@postgres_00:5432/db_3" },
+    "4": { "url": "postgres://postgres:postgres@postgres_01:5432/db_4" },
+    "5": { "url": "postgres://postgres:postgres@postgres_01:5432/db_5" },
+    "6": { "url": "postgres://postgres:postgres@postgres_01:5432/db_6" },
+    "7": { "url": "postgres://postgres:postgres@postgres_01:5432/db_7" },
+    "8": { "url": "postgres://postgres:postgres@postgres_02:5432/db_8" },
+    "9": { "url": "postgres://postgres:postgres@postgres_02:5432/db_9" },
+    "a": { "url": "postgres://postgres:postgres@postgres_02:5432/db_a" },
+    "b": { "url": "postgres://postgres:postgres@postgres_02:5432/db_b" },
+    "c": { "url": "postgres://postgres:postgres@postgres_03:5432/db_c" },
+    "d": { "url": "postgres://postgres:postgres@postgres_03:5432/db_d" },
+    "e": { "url": "postgres://postgres:postgres@postgres_03:5432/db_e" },
+    "f": { "url": "postgres://postgres:postgres@postgres_03:5432/db_f" }
+  }
+}
