@@ -267,6 +267,35 @@ services:
       timeout: 3s
       retries: 5
 
+  registry:
+    image: postgres:15-alpine
+    container_name: travel_planner_registry
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASS:-postgres}
+      POSTGRES_DB: registry
+    command:
+      - "postgres"
+      - "-c"
+      - "wal_level=logical"
+      - "-c"
+      - "max_wal_senders=10"
+      - "-c"
+      - "max_replication_slots=10"
+      - "-c"
+      - "log_destination=stderr"
+      - "-c"
+      - "logging_collector=off"
+    volumes:
+      - registry_data:/var/lib/postgresql/data
+      - ./db/registry:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d registry"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   pgcat:
     image: ghcr.io/postgresml/pgcat:latest
     profiles: ["disabled"]
@@ -306,7 +335,11 @@ services:
       target: production
     container_name: travel_planner_api
     restart: unless-stopped
-    command: ["npm", "run", "start"]
+    command: >
+      sh -c "
+      npm run shards:seed-registry -- --registry=${SHARD_REGISTRY_URL:-} --mapping=/app/db/mapping.json &&
+      npm run start
+      "
     env_file:
       - .env
     environment:
@@ -327,6 +360,8 @@ services:
       postgres_02:
         condition: service_healthy
       postgres_03:
+        condition: service_healthy
+      registry:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget --spider --quiet http://localhost:3000/api/health || exit 1"]
@@ -356,6 +391,7 @@ volumes:
   postgres_shard01_data:
   postgres_shard02_data:
   postgres_shard03_data:
+  registry_data:
   app_logs:
     driver: local
     driver_opts:

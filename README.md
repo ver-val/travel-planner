@@ -152,19 +152,25 @@ The script executes the same SQL in a transaction on all 16 DBs (rolls back ever
 
 ### CLI for shard rebalancing
 ```
-docker compose run --rm \
-  -v "$(pwd)/db/mapping.json:/app/db/mapping.json:rw" \
-  api npm run shards:rebalance -- \
-    --db=a \                              # last hex of UUID
-    --target-url=postgres://postgres:postgres@postgres_03:5432/db_c \
-    --mapping=/app/db/mapping.json \
-    --publication=pub_a_to_c \
-    --subscription=sub_a_to_c \
-    --wait-seconds=180
+docker compose run --rm api npm run shards:rebalance -- \
+  --db=a \                              # last hex of UUID
+  --target-url=postgres://postgres:postgres@postgres_03:5432/db_c \
+  --registry=$SHARD_REGISTRY_URL \      # shared registry DB
+  --publication=pub_a_to_c \
+  --subscription=sub_a_to_c \
+  --wait-seconds=180
 ```
-What it does: creates the target DB if needed (applies `db/shards/schema/000_schema.sql`), starts logical replication, waits for catch-up, locks source tables, disables/drops the subscription, updates `mapping.json`, and issues `REVOKE ALL` on the old DB. On access errors the API reloads the mapping and switches. The old DB is not dropped.
+What it does: creates the target DB if needed (applies `db/shards/schema/000_schema.sql`), starts logical replication, waits for catch-up, locks source tables, disables/drops the subscription, updates the registry (and local mapping file only if present), and issues `REVOKE ALL` on the old DB. On access errors the API reloads the mapping (registry first, file as fallback) and switches. The old DB is not dropped.
 
-> Note: the `api` container is read-only; mount `db/mapping.json` as `rw` as shown above.
+### Registry seeding (optional)
+If you use a shared registry (`SHARD_REGISTRY_URL`), seed it from the local mapping:
+```
+npm run shards:seed-registry -- --registry=$SHARD_REGISTRY_URL --mapping=./db/mapping.json
+```
+Example env (see `.env.example`):
+```
+SHARD_REGISTRY_URL=postgres://postgres:postgres@registry:5432/registry
+```
 
 ### Pool tuning
 Shard pools are controlled via env: `SHARD_POOL_MAX` (default 10), `SHARD_POOL_IDLE` ms (default 30000), `SHARD_POOL_CONNECT_TIMEOUT` ms (default 5000). Pools close on graceful shutdown.

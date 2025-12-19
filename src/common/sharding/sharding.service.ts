@@ -1,8 +1,9 @@
-import { BadRequestException, Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DataSource, Repository } from 'typeorm';
 import * as fs from 'fs';
 import * as path from 'path';
+import { Client } from 'pg';
 import { TravelPlan } from '../../travel-plans/travel-plan.entity';
 import { Location } from '../../locations/location.entity';
 
@@ -29,13 +30,14 @@ interface LocationLookupResult {
 }
 
 @Injectable()
-export class ShardingService implements OnModuleDestroy {
+export class ShardingService implements OnModuleDestroy, OnModuleInit {
   private readonly logger = new Logger(ShardingService.name);
   private readonly shardMap: Map<string, ShardConnectionConfig> = new Map();
   private readonly dataSources = new Map<string, DataSource>();
   private readonly defaultUser: string;
   private readonly defaultPass: string;
   private readonly mappingPath: string;
+  private readonly registryUrl?: string;
 
   constructor(private readonly configService: ConfigService) {
     this.defaultUser = this.configService.get<string>('DB_USER') ?? 'postgres';
@@ -43,6 +45,8 @@ export class ShardingService implements OnModuleDestroy {
     this.mappingPath =
       this.configService.get<string>('SHARD_MAP_PATH') ??
       path.join(process.cwd(), 'db', 'mapping.json');
+    this.registryUrl = this.configService.get<string>('SHARD_REGISTRY_URL') || undefined;
+    // Initial load from file (fast); registry will be loaded on module init if configured
     this.refreshMapping();
   }
 
@@ -80,10 +84,34 @@ export class ShardingService implements OnModuleDestroy {
     return map;
   }
 
-  private refreshMapping() {
-    const map = this.loadMappingFile(this.mappingPath);
+  private async loadMappingFromRegistry(): Promise<Map<string, ShardConnectionConfig>> {
+    if (!this.registryUrl) {
+      throw new Error('Registry URL not configured');
+    }
+    const client = new Client({ connectionString: this.registryUrl });
+    await client.connect();
+    try {
+      const res = await client.query<{ shard_key: string; url: string }>(
+        'SELECT shard_key, url FROM shard_mapping ORDER BY shard_key',
+      );
+      const map = new Map<string, ShardConnectionConfig>();
+      for (const row of res.rows) {
+        const key = row.shard_key.toLowerCase();
+        map.set(key, { id: key, url: row.url });
+      }
+      if (map.size === 0) {
+        throw new Error('Registry mapping is empty');
+      }
+      return map;
+    } finally {
+      await client.end().catch(() => undefined);
+    }
+  }
+
+  private refreshMapping(map?: Map<string, ShardConnectionConfig>) {
+    const nextMap = map ?? this.loadMappingFile(this.mappingPath);
     this.shardMap.clear();
-    for (const [key, cfg] of map.entries()) {
+    for (const [key, cfg] of nextMap.entries()) {
       this.shardMap.set(key, cfg);
     }
   }
@@ -112,6 +140,18 @@ export class ShardingService implements OnModuleDestroy {
 
   async reloadMapping(): Promise<void> {
     this.logger.warn('Reloading shard mapping and resetting pools');
+    let loaded: Map<string, ShardConnectionConfig> | null = null;
+    if (this.registryUrl) {
+      try {
+        loaded = await this.loadMappingFromRegistry();
+      } catch (e: any) {
+        this.logger.error(`Failed to load mapping from registry: ${e?.message || e}`);
+      }
+    }
+    if (!loaded) {
+      loaded = this.loadMappingFile(this.mappingPath);
+    }
+
     for (const [key, ds] of this.dataSources.entries()) {
       if (ds.isInitialized) {
         try {
@@ -122,7 +162,17 @@ export class ShardingService implements OnModuleDestroy {
       }
     }
     this.dataSources.clear();
-    this.refreshMapping();
+    this.refreshMapping(loaded);
+  }
+
+  async onModuleInit() {
+    if (this.registryUrl) {
+      try {
+        await this.reloadMapping();
+      } catch (e: any) {
+        this.logger.error(`Failed to bootstrap mapping from registry: ${e?.message || e}`);
+      }
+    }
   }
 
   resolveShardKey(id: string): string {

@@ -26,6 +26,7 @@ const mapArg = args.find((a) => a.startsWith('--mapping='));
 const publicationArg = args.find((a) => a.startsWith('--publication='));
 const subscriptionArg = args.find((a) => a.startsWith('--subscription='));
 const waitSecondsArg = args.find((a) => a.startsWith('--wait-seconds='));
+const registryArg = args.find((a) => a.startsWith('--registry='));
 
 if (!dbArg || !targetArg) {
   console.error('Usage: ts-node scripts/rebalance-shard.ts --db=db_a --target-url=postgres://user:pass@host:5432/db_a [--mapping=./db/mapping.json] [--publication=rebalance_pub] [--subscription=rebalance_sub] [--wait-seconds=120]');
@@ -38,16 +39,15 @@ const mappingPath =
   mapArg?.split('=')[1] ||
   process.env.SHARD_MAP_PATH ||
   path.join(process.cwd(), 'db', 'mapping.json');
+const registryUrl = registryArg?.split('=')[1] || process.env.SHARD_REGISTRY_URL;
 const publicationName = publicationArg?.split('=')[1] || `pub_${shardKey}`;
 const subscriptionName = subscriptionArg?.split('=')[1] || `sub_${shardKey}`;
 const waitSeconds = parseInt(waitSecondsArg?.split('=')[1] || '120', 10);
 
-if (!existsSync(mappingPath)) {
-  console.error(`Mapping file not found: ${mappingPath}`);
-  process.exit(1);
-}
-
-function loadMapping(file: string): Map<string, ShardConnectionConfig> {
+function loadMappingFromFile(file: string): Map<string, ShardConnectionConfig> {
+  if (!existsSync(file)) {
+    throw new Error(`Mapping file not found: ${file}`);
+  }
   const raw = readFileSync(file, 'utf8');
   const parsed = JSON.parse(raw) as ShardMappingFile;
   const map = new Map<string, ShardConnectionConfig>();
@@ -65,6 +65,30 @@ function loadMapping(file: string): Map<string, ShardConnectionConfig> {
     });
   }
   return map;
+}
+
+async function loadMapping(): Promise<Map<string, ShardConnectionConfig>> {
+  if (registryUrl) {
+    const client = new Client({ connectionString: registryUrl });
+    await client.connect();
+    try {
+      const res = await client.query<{ shard_key: string; url: string }>(
+        'SELECT shard_key, url FROM shard_mapping ORDER BY shard_key',
+      );
+      if (res.rows.length > 0) {
+        const map = new Map<string, ShardConnectionConfig>();
+        for (const row of res.rows) {
+          const key = row.shard_key.toLowerCase();
+          map.set(key, { id: key, url: row.url });
+        }
+        return map;
+      }
+    } finally {
+      await client.end().catch(() => undefined);
+    }
+  }
+
+  return loadMappingFromFile(mappingPath);
 }
 
 function toPgConfig(cfg: ShardConnectionConfig) {
@@ -137,11 +161,33 @@ async function ensureTargetDatabase(targetUrl: string) {
   }
 }
 
+async function updateRegistry(shardKey: string, targetUrl: string) {
+  if (!registryUrl) return;
+  const client = new Client({ connectionString: registryUrl });
+  await client.connect();
+  try {
+    await client.query(
+      `CREATE TABLE IF NOT EXISTS shard_mapping (
+        shard_key text PRIMARY KEY,
+        url text NOT NULL,
+        updated_at timestamptz DEFAULT now()
+      );`,
+    );
+    await client.query(
+      `INSERT INTO shard_mapping(shard_key, url) VALUES ($1, $2)
+       ON CONFLICT (shard_key) DO UPDATE SET url = EXCLUDED.url, updated_at = now()`,
+      [shardKey, targetUrl],
+    );
+  } finally {
+    await client.end().catch(() => undefined);
+  }
+}
+
 async function main() {
-  const mapping = loadMapping(mappingPath);
+  const mapping = await loadMapping();
   const sourceCfg = mapping.get(shardKey);
   if (!sourceCfg) {
-    console.error(`Shard key ${shardKey} not found in mapping ${mappingPath}`);
+    console.error(`Shard key ${shardKey} not found in mapping${registryUrl ? ' (registry)' : ''}`);
     process.exit(1);
   }
 
@@ -209,9 +255,16 @@ async function main() {
     await source.query('DROP PUBLICATION ' + publicationName);
 
     console.log('Step 5: update mapping to target URL');
-    const raw = JSON.parse(readFileSync(mappingPath, 'utf8')) as ShardMappingFile;
-    raw.virtualNodes[shardKey] = { url: targetUrl };
-    writeFileSync(mappingPath, JSON.stringify(raw, null, 2));
+    if (mappingPath && existsSync(mappingPath)) {
+      try {
+        const raw = JSON.parse(readFileSync(mappingPath, 'utf8')) as ShardMappingFile;
+        raw.virtualNodes[shardKey] = { url: targetUrl };
+        writeFileSync(mappingPath, JSON.stringify(raw, null, 2));
+      } catch (err: any) {
+        console.warn(`Failed to update local mapping file: ${err?.message || err}`);
+      }
+    }
+    await updateRegistry(shardKey, targetUrl);
 
     console.log('Step 6: revoke read rights on source to signal switch');
     await source.query('REVOKE ALL ON ALL TABLES IN SCHEMA public FROM PUBLIC');
