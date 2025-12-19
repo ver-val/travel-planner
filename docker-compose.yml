@@ -145,6 +145,12 @@ services:
     command:
       - "postgres"
       - "-c"
+      - "wal_level=logical"
+      - "-c"
+      - "max_replication_slots=32"
+      - "-c"
+      - "max_wal_senders=32"
+      - "-c"
       - "log_destination=stderr"
       - "-c"
       - "logging_collector=off"
@@ -171,6 +177,12 @@ services:
       POSTGRES_PASSWORD: ${DB_PASS:-postgres}
     command:
       - "postgres"
+      - "-c"
+      - "wal_level=logical"
+      - "-c"
+      - "max_replication_slots=32"
+      - "-c"
+      - "max_wal_senders=32"
       - "-c"
       - "log_destination=stderr"
       - "-c"
@@ -199,6 +211,12 @@ services:
     command:
       - "postgres"
       - "-c"
+      - "wal_level=logical"
+      - "-c"
+      - "max_replication_slots=32"
+      - "-c"
+      - "max_wal_senders=32"
+      - "-c"
       - "log_destination=stderr"
       - "-c"
       - "logging_collector=off"
@@ -225,6 +243,12 @@ services:
       POSTGRES_PASSWORD: ${DB_PASS:-postgres}
     command:
       - "postgres"
+      - "-c"
+      - "wal_level=logical"
+      - "-c"
+      - "max_replication_slots=32"
+      - "-c"
+      - "max_wal_senders=32"
       - "-c"
       - "log_destination=stderr"
       - "-c"

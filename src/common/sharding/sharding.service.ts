@@ -31,22 +31,22 @@ interface LocationLookupResult {
 @Injectable()
 export class ShardingService implements OnModuleDestroy {
   private readonly logger = new Logger(ShardingService.name);
-  private readonly shardMap: Map<string, ShardConnectionConfig>;
+  private readonly shardMap: Map<string, ShardConnectionConfig> = new Map();
   private readonly dataSources = new Map<string, DataSource>();
   private readonly defaultUser: string;
   private readonly defaultPass: string;
+  private readonly mappingPath: string;
 
   constructor(private readonly configService: ConfigService) {
     this.defaultUser = this.configService.get<string>('DB_USER') ?? 'postgres';
     this.defaultPass = this.configService.get<string>('DB_PASS') ?? 'postgres';
-    this.shardMap = this.loadMapping();
-  }
-
-  private loadMapping(): Map<string, ShardConnectionConfig> {
-    const mappingPath =
+    this.mappingPath =
       this.configService.get<string>('SHARD_MAP_PATH') ??
       path.join(process.cwd(), 'db', 'mapping.json');
+    this.refreshMapping();
+  }
 
+  private loadMappingFile(mappingPath: string): Map<string, ShardConnectionConfig> {
     if (!fs.existsSync(mappingPath)) {
       throw new Error(`Shard mapping file not found at ${mappingPath}`);
     }
@@ -80,8 +80,49 @@ export class ShardingService implements OnModuleDestroy {
     return map;
   }
 
+  private refreshMapping() {
+    const map = this.loadMappingFile(this.mappingPath);
+    this.shardMap.clear();
+    for (const [key, cfg] of map.entries()) {
+      this.shardMap.set(key, cfg);
+    }
+  }
+
   get shardKeys(): string[] {
     return [...this.shardMap.keys()].sort();
+  }
+
+  shouldReloadOnError(err: any): boolean {
+    const code = err?.code || err?.driverError?.code;
+    const msg = String(err?.message || '').toLowerCase();
+    const reloadableCodes = new Set([
+      'ECONNREFUSED',
+      'ENOTFOUND',
+      '57P03', // cannot connect now
+      '57P01', // admin shutdown
+      '42501', // permission denied
+      '3D000', // invalid catalog name
+    ]);
+    if (code && reloadableCodes.has(code)) return true;
+    if (msg.includes('permission denied')) return true;
+    if (msg.includes('does not exist')) return true;
+    if (msg.includes('connection refused')) return true;
+    return false;
+  }
+
+  async reloadMapping(): Promise<void> {
+    this.logger.warn('Reloading shard mapping and resetting pools');
+    for (const [key, ds] of this.dataSources.entries()) {
+      if (ds.isInitialized) {
+        try {
+          await ds.destroy();
+        } catch (e: any) {
+          this.logger.error(`Failed to close pool ${key}: ${e?.message || e}`);
+        }
+      }
+    }
+    this.dataSources.clear();
+    this.refreshMapping();
   }
 
   resolveShardKey(id: string): string {
@@ -129,9 +170,16 @@ export class ShardingService implements OnModuleDestroy {
       },
     });
 
-    await dataSource.initialize();
-    this.dataSources.set(shardKey, dataSource);
-    return dataSource;
+    try {
+      await dataSource.initialize();
+      this.dataSources.set(shardKey, dataSource);
+      return dataSource;
+    } catch (err: any) {
+      if (this.shouldReloadOnError(err)) {
+        await this.reloadMapping();
+      }
+      throw err;
+    }
   }
 
   async getRepositoriesForPlan(planId: string): Promise<{

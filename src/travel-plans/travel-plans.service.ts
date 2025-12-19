@@ -22,6 +22,19 @@ export class TravelPlansService {
 
   constructor(private readonly sharding: ShardingService) {}
 
+  private async retryOnShardReload<T>(action: () => Promise<T>): Promise<T> {
+    try {
+      return await action();
+    } catch (err) {
+      if (this.sharding.shouldReloadOnError(err)) {
+        this.logger.warn('Reloading shard mapping after error');
+        await this.sharding.reloadMapping();
+        return action();
+      }
+      throw err;
+    }
+  }
+
   async list(page = 1, limit = 10) {
     const repos = await this.sharding.getAllPlanRepositories();
     const aggregated: TravelPlan[] = [];
@@ -61,53 +74,58 @@ export class TravelPlansService {
     }
 
     const id = randomUUID();
-    const { planRepo, shardKey } = await this.sharding.getRepositoriesForPlan(
-      id,
-    );
+    return this.retryOnShardReload(async () => {
+      const { planRepo, shardKey } = await this.sharding.getRepositoriesForPlan(
+        id,
+      );
 
-    const plan = planRepo.create({ ...dto, id });
-    const saved = await planRepo.save(plan);
+      const plan = planRepo.create({ ...dto, id });
+      const saved = await planRepo.save(plan);
 
-    this.logger.debug(`Travel plan created id=${saved.id} shard=${shardKey}`);
-    return saved;
+      this.logger.debug(`Travel plan created id=${saved.id} shard=${shardKey}`);
+      return saved;
+    });
   }
 
   async get(id: string): Promise<TravelPlan & { locations: Location[] }> {
-    const { planRepo, shardKey } = await this.sharding.getRepositoriesForPlan(
-      id,
-    );
-    this.logger.debug(`Fetching travel plan id=${id} shard=${shardKey}`);
+    return this.retryOnShardReload(async () => {
+      const { planRepo, shardKey } = await this.sharding.getRepositoriesForPlan(
+        id,
+      );
+      this.logger.debug(`Fetching travel plan id=${id} shard=${shardKey}`);
 
-    const plan = await planRepo.findOne({
-      where: { id },
-      relations: ['locations'],
+      const plan = await planRepo.findOne({
+        where: { id },
+        relations: ['locations'],
+      });
+
+      if (!plan) {
+        throw new NotFoundException('Travel plan not found');
+      }
+
+      plan.locations = (plan.locations ?? []).sort(
+        (a, b) => (a.visit_order ?? 0) - (b.visit_order ?? 0),
+      );
+
+      return plan;
     });
-
-    if (!plan) {
-      throw new NotFoundException('Travel plan not found');
-    }
-
-    plan.locations = (plan.locations ?? []).sort(
-      (a, b) => (a.visit_order ?? 0) - (b.visit_order ?? 0),
-    );
-
-    return plan;
   }
 
   async update(id: string, dto: UpdateTravelPlanDto): Promise<TravelPlan> {
-    const { planRepo, shardKey } = await this.sharding.getRepositoriesForPlan(
-      id,
-    );
-    this.logger.debug(
-      `Updating travel plan id=${id} shard=${shardKey} version=${dto.version}`,
-    );
+    return this.retryOnShardReload(async () => {
+      const { planRepo, shardKey } = await this.sharding.getRepositoriesForPlan(
+        id,
+      );
+      this.logger.debug(
+        `Updating travel plan id=${id} shard=${shardKey} version=${dto.version}`,
+      );
 
-    if (dto.version === undefined) {
-      throw new BadRequestException({
-        error: 'Validation error',
-        details: 'Version is required',
-      });
-    }
+      if (dto.version === undefined) {
+        throw new BadRequestException({
+          error: 'Validation error',
+          details: 'Version is required',
+        });
+      }
 
     if (dto.start_date !== undefined || dto.end_date !== undefined) {
       const current = await planRepo.findOne({
@@ -181,50 +199,55 @@ export class TravelPlansService {
       throw new NotFoundException('Travel plan not found after update');
     }
 
-    const updated: TravelPlan = {
-      ...updatedRaw,
-      ...(updatedRaw.budget !== undefined && {
-        budget:
-          typeof updatedRaw.budget === 'string'
-            ? this.numericTransformer.from(updatedRaw.budget)
-            : updatedRaw.budget,
-      }),
-    };
+      const updated: TravelPlan = {
+        ...updatedRaw,
+        ...(updatedRaw.budget !== undefined && {
+          budget:
+            typeof updatedRaw.budget === 'string'
+              ? this.numericTransformer.from(updatedRaw.budget)
+              : updatedRaw.budget,
+        }),
+      };
 
-    this.logger.debug(
-      `Travel plan updated id=${id} shard=${shardKey} newVersion=${updated.version}`,
-    );
+      this.logger.debug(
+        `Travel plan updated id=${id} shard=${shardKey} newVersion=${updated.version}`,
+      );
 
-    return updated;
+      return updated;
+    });
   }
 
   async remove(id: string): Promise<void> {
-    const { planRepo, shardKey } = await this.sharding.getRepositoriesForPlan(
-      id,
-    );
-    this.logger.debug(`Removing travel plan id=${id} shard=${shardKey}`);
+    await this.retryOnShardReload(async () => {
+      const { planRepo, shardKey } = await this.sharding.getRepositoriesForPlan(
+        id,
+      );
+      this.logger.debug(`Removing travel plan id=${id} shard=${shardKey}`);
 
-    await planRepo.manager.transaction(async (manager) => {
-      const res = await manager.delete(TravelPlan, { id });
-      if (res.affected === 0) {
-        throw new NotFoundException('Travel plan not found');
-      }
+      await planRepo.manager.transaction(async (manager) => {
+        const res = await manager.delete(TravelPlan, { id });
+        if (res.affected === 0) {
+          throw new NotFoundException('Travel plan not found');
+        }
+      });
+
+      this.logger.debug(`Travel plan removed id=${id} shard=${shardKey}`);
     });
-
-    this.logger.debug(`Travel plan removed id=${id} shard=${shardKey}`);
   }
 
   async removeAll(): Promise<void> {
-    this.logger.debug(`Removing ALL travel plans across shards`);
+    await this.retryOnShardReload(async () => {
+      this.logger.debug(`Removing ALL travel plans across shards`);
 
-    const repos = await this.sharding.getAllPlanRepositories();
-    for (const { repo, shardKey } of repos) {
-      await repo.manager.transaction(async (manager) => {
-        await manager.delete(TravelPlan, {});
-      });
-      this.logger.debug(`Removed travel plans from shard=${shardKey}`);
-    }
+      const repos = await this.sharding.getAllPlanRepositories();
+      for (const { repo, shardKey } of repos) {
+        await repo.manager.transaction(async (manager) => {
+          await manager.delete(TravelPlan, {});
+        });
+        this.logger.debug(`Removed travel plans from shard=${shardKey}`);
+      }
 
-    this.logger.debug(`All travel plans removed`);
+      this.logger.debug(`All travel plans removed`);
+    });
   }
 }

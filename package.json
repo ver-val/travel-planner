@@ -23,7 +23,8 @@
     "db:sync": "ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js schema:sync -d ormconfig.ts",
     "swagger:export": "ts-node ./scripts/export-swagger.ts",
     "test:hurl": "hurl --no-output test/hurl/*.hurl --variable host=http://localhost:3000 --variable timeout=5000 --color --test --report-html test-results/ --report-junit test-results/junit.xml",
-    "shards:apply": "ts-node ./scripts/apply-shards.ts"
+    "shards:apply": "ts-node ./scripts/apply-shards.ts",
+    "shards:rebalance": "ts-node ./scripts/rebalance-shard.ts"
   },
   "dependencies": {
     "@nestjs/common": "10.4.20",
