@@ -1,15 +1,13 @@
 import { Controller, Get } from '@nestjs/common';
-import {
-  HealthCheck,
-  HealthCheckService,
-  TypeOrmHealthIndicator,
-} from '@nestjs/terminus';
+import { HealthCheck, HealthCheckService, HealthIndicatorService } from '@nestjs/terminus';
+import { ShardingService } from '../common/sharding/sharding.service';
 
 @Controller('health')
 export class HealthController {
   constructor(
     private health: HealthCheckService,
-    private db: TypeOrmHealthIndicator,
+    private indicators: HealthIndicatorService,
+    private sharding: ShardingService,
   ) {}
 
   @Get()
@@ -30,7 +28,13 @@ export class HealthController {
   @HealthCheck()
   async checkDetails() {
     return this.health.check([
-      async () => this.db.pingCheck('database'),
+      async () => {
+        const shards = await this.sharding.pingAllShards();
+        const allUp = Object.values(shards).every(Boolean);
+        return allUp
+          ? this.indicators.check('shards').up({ nodes: shards })
+          : this.indicators.check('shards').down({ nodes: shards });
+      },
     ]);
   }
 }

@@ -33,6 +33,7 @@ COPY --from=build /app/ormconfig.ts ./ormconfig.ts
 COPY --from=build /app/db ./db
 COPY --from=build /app/tsconfig*.json ./
 COPY --from=build /app/src ./src
+COPY --from=build /app/scripts ./scripts
 
 EXPOSE 3000
-CMD ["sh", "-c", "npm run build && npm run migration:run && npm run start"]
+CMD ["sh", "-c", "npm run build && npm run shards:seed-registry -- --registry=${SHARD_REGISTRY_URL:-} --mapping=/app/db/mapping.json && npm run migration:run && npm run start"]

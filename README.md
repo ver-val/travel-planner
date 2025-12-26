@@ -136,6 +136,47 @@ you can watch WAL apply lag on the standby with
 
 ---
 
+## Sharding & Rebalancing
+
+### Layout
+- 16 logical shards keyed by the last hex of the UUID (`0..f`), mapping lives in `db/mapping.json`.
+- 4 Postgres nodes (`postgres_00..postgres_03`), each hosts 4 DBs (`db_0..db_f`).
+- API computes the shard key and connects directly; mapping changes do not require a restart because `ShardingService` reloads the file on access errors.
+
+### CLI for applying DDL/DML to all shards
+```
+npm run shards:apply -- --file=./path/to/script.sql
+npm run shards:apply -- --dir=./db/migrations   # runs all .sql in order
+```
+The script executes the same SQL in a transaction on all 16 DBs (rolls back everywhere if any fails).
+
+### CLI for shard rebalancing
+```
+docker compose run --rm api npm run shards:rebalance -- \
+  --db=a \                              # last hex of UUID
+  --target-url=postgres://postgres:postgres@postgres_03:5432/db_c \
+  --registry=$SHARD_REGISTRY_URL \      # shared registry DB
+  --publication=pub_a_to_c \
+  --subscription=sub_a_to_c \
+  --wait-seconds=180
+```
+What it does: creates the target DB if needed (applies `db/shards/schema/000_schema.sql`), starts logical replication, waits for catch-up, locks source tables, disables/drops the subscription, updates the registry (and local mapping file only if present), and issues `REVOKE ALL` on the old DB. On access errors the API reloads the mapping (registry first, file as fallback) and switches. The old DB is not dropped.
+
+### Registry seeding (optional)
+If you use a shared registry (`SHARD_REGISTRY_URL`), seed it from the local mapping:
+```
+npm run shards:seed-registry -- --registry=$SHARD_REGISTRY_URL --mapping=./db/mapping.json
+```
+Example env (see `.env.example`):
+```
+SHARD_REGISTRY_URL=postgres://postgres:postgres@registry:5432/registry
+```
+
+### Pool tuning
+Shard pools are controlled via env: `SHARD_POOL_MAX` (default 10), `SHARD_POOL_IDLE` ms (default 30000), `SHARD_POOL_CONNECT_TIMEOUT` ms (default 5000). Pools close on graceful shutdown.
+
+---
+
 ## Testing Strategy
 
 - **Unit** (`npm test`): service-level logic with repository mocks.
